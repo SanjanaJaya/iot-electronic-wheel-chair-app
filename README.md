@@ -1,16 +1,20 @@
-# iot_electronic_wheel_chair_app
+# IOT Electronic Wheelchair App
 
-A new Flutter project.
+The purpose of this Flutter app is to use Bluetooth to operate an electric wheelchair.  It was created in the **second year, second semester** as a component of our **Internet of Things (IoT)** program.  An **ESP32 board** and **IR sensors** power the wheelchair, enabling users to control mobility via an app.
+
+## Features
+- **Bluetooth Connectivity** – Seamlessly connects to the ESP32 board.
+- **Wheelchair Movement Control** – Navigate the wheelchair remotely.
+- **ESP32 Device Control** – Can also control other ESP32-based moving components.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+To run this project, ensure you have Flutter installed. If you're new to Flutter, check out these resources:
 
-A few resources to get you started if this is your first Flutter project:
+- [Flutter Codelab](https://docs.flutter.dev/get-started/codelab)
+- [Flutter Cookbook](https://docs.flutter.dev/cookbook)
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+For detailed Flutter documentation, visit [Flutter Docs](https://docs.flutter.dev/).
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+---
+🚀 **Developed for the IoT module – Year 2, Semester 2**  
