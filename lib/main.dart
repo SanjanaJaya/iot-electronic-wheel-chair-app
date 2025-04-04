@@ -39,6 +39,10 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
   bool _isConnected = false;
   String _statusMessage = "Initializing...";
   List<ScanResult> _foundDevices = [];
+  bool _isScanning = false;
+  StreamSubscription<List<ScanResult>>? _scanSubscription;
+
+  // Device configuration
   final String targetDeviceName = "ESP32_Wheelchair";
   final String targetDeviceMac = "DE:BF:ED:58:16:F0"; // Replace with your ESP32's MAC
   final String serviceUuid = "0000ffe0-0000-1000-8000-00805f9b34fb";
@@ -48,6 +52,12 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
   void initState() {
     super.initState();
     _initBluetooth();
+  }
+
+  @override
+  void dispose() {
+    _scanSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _initBluetooth() async {
@@ -82,26 +92,37 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
   }
 
   void _startScan() {
+    if (_isScanning) return;
+
     setState(() {
       _statusMessage = "Scanning for devices...";
       _foundDevices.clear();
+      _isScanning = true;
     });
 
-    FlutterBluePlus.scanResults.listen((results) {
+    _scanSubscription?.cancel();
+    _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
       if (!mounted) return;
 
       setState(() {
-        _foundDevices = results;
+        // Update the list while avoiding duplicates
+        for (var result in results) {
+          if (!_foundDevices.any((element) =>
+          element.device.remoteId == result.device.remoteId)) {
+            _foundDevices.add(result);
+          }
+        }
       });
 
+      // Try to connect to target device if found
       for (ScanResult result in results) {
         final device = result.device;
-        print("Found device: ${device.platformName} (${device.remoteId})");
+        final deviceName = result.device.platformName;
+        final macAddress = device.remoteId.toString();
 
-        // Try to connect if name matches OR MAC matches
-        if (device.platformName == targetDeviceName ||
-            device.remoteId.toString() == targetDeviceMac) {
-          FlutterBluePlus.stopScan();
+        print("Found device: $deviceName ($macAddress)");
+
+        if (deviceName == targetDeviceName || macAddress == targetDeviceMac) {
           _connectToDevice(device);
           break;
         }
@@ -109,6 +130,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
     }, onError: (e) {
       setState(() {
         _statusMessage = "Scan failed: ${e.toString()}";
+        _isScanning = false;
       });
     });
 
@@ -116,10 +138,28 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
       timeout: const Duration(seconds: 15),
       androidUsesFineLocation: false,
     );
+
+    // Automatically stop scan after timeout
+    Future.delayed(const Duration(seconds: 15), () {
+      if (mounted && _isScanning) {
+        _stopScan();
+      }
+    });
+  }
+
+  void _stopScan() {
+    FlutterBluePlus.stopScan();
+    setState(() {
+      _isScanning = false;
+      if (_statusMessage.contains("Scanning")) {
+        _statusMessage = "Scan completed";
+      }
+    });
   }
 
   Future<void> _connectToDevice(BluetoothDevice device) async {
     if (_isConnecting) return;
+    _stopScan();
 
     setState(() {
       _isConnecting = true;
@@ -171,6 +211,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
         _statusMessage = "Connection failed: ${e.toString()}";
       });
       await device.disconnect();
+      _startScan(); // Restart scan if connection fails
     }
   }
 
@@ -183,13 +224,28 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
+            child: _foundDevices.isEmpty
+                ? Center(
+              child: Text(
+                _isScanning ? "Scanning for devices..." : "No devices found",
+                style: const TextStyle(fontSize: 18),
+              ),
+            )
+                : ListView.builder(
               itemCount: _foundDevices.length,
               itemBuilder: (context, index) {
-                final device = _foundDevices[index].device;
+                final result = _foundDevices[index];
+                final device = result.device;
+                String name = device.platformName;
+                if (name.isEmpty) {
+                  name = "Unknown";
+                }
                 return ListTile(
-                  title: Text(device.platformName.isEmpty ? "Unknown" : device.platformName),
+                  title: Text(name),
                   subtitle: Text(device.remoteId.toString()),
+                  trailing: _isConnecting && _connectedDevice?.remoteId == device.remoteId
+                      ? const CircularProgressIndicator()
+                      : null,
                   onTap: () => _connectToDevice(device),
                 );
               },
@@ -215,8 +271,8 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
                 ),
                 const SizedBox(height: 10),
                 ElevatedButton(
-                  onPressed: _startScan,
-                  child: const Text('Scan Again'),
+                  onPressed: _isScanning ? _stopScan : _startScan,
+                  child: Text(_isScanning ? 'Stop Scan' : 'Scan Again'),
                 ),
               ],
             ),
@@ -226,6 +282,8 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
     );
   }
 }
+
+// ... [Keep the rest of the ControlScreen class exactly the same as in the previous code]
 
 class ControlScreen extends StatefulWidget {
   final BluetoothCharacteristic characteristic;
@@ -248,6 +306,7 @@ class _ControlScreenState extends State<ControlScreen> {
   void initState() {
     super.initState();
     _setupDisconnectListener();
+    _sendCommand('V${(_speed * 255).round()}'); // Set initial speed
   }
 
   void _setupDisconnectListener() {
@@ -314,6 +373,7 @@ class _ControlScreenState extends State<ControlScreen> {
   @override
   void dispose() {
     _connectionSubscription.cancel();
+    _sendCommand('S'); // Stop movement when screen is disposed
     super.dispose();
   }
 
